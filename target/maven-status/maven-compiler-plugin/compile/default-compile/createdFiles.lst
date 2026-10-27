@@ -1,0 +1,3 @@
+com\auction\system\config\WebSocketConfig.class
+com\auction\system\OnlineAuctionApplication.class
+com\auction\system\websocket\AuctionWebSocketHandler.class

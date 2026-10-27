@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Auctions | BidSphere</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="theme.css" rel="stylesheet">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-custom fixed-top">
+    <div class="container">
+        <a class="navbar-brand" href="index.html">
+            <div class="brand-icon"><i class="fas fa-gavel"></i></div>
+            <span>BidSphere</span>
+        </a>
+        <button class="navbar-toggler text-white border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="collapse navbar-collapse" id="navContent">
+            <ul class="navbar-nav mx-auto">
+                <li class="nav-item"><a class="nav-link" href="index.html"><i class="fas fa-home me-1"></i> Home</a></li>
+                <li class="nav-item"><a class="nav-link active" href="auctions.html"><i class="fas fa-fire me-1"></i> Live Auctions</a></li>
+                <li class="nav-item"><a class="nav-link" href="create-auction.html"><i class="fas fa-plus-circle me-1"></i> Create</a></li>
+                <li class="nav-item"><a class="nav-link" href="bidding.html"><i class="fas fa-hand-holding-usd me-1"></i> Bid Room</a></li>
+                <li class="nav-item"><a class="nav-link" href="dashboard.html"><i class="fas fa-chart-pie me-1"></i> Analytics</a></li>
+            </ul>
+            <div class="d-flex align-items-center gap-2">
+                <button onclick="toggleTheme()" class="theme-toggle-btn me-1" title="Toggle Dark/Light Mode">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <div class="user-status-pill">
+                    <i class="fas fa-user-circle text-primary"></i>
+                    <span id="userStatusText">Guest</span>
+                </div>
+                <button id="logoutBtn" onclick="logout()" class="btn btn-sm btn-outline-danger" style="display:none; border-radius: 20px;">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+                <a id="loginBtn" href="login.html" class="btn-glow py-2 px-3 text-sm" style="font-size:0.85rem;">Sign In</a>
+            </div>
+        </div>
+    </div>
+</nav>
+<script src="theme.js"></script>
+
+<div class="container" style="margin-top: 6rem; padding-bottom: 5rem;">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h2 class="fw-bold text-white mb-1">Explore Live Auctions</h2>
+            <p class="text-secondary small mb-0">Browse and place instant competitive bids in real-time</p>
+        </div>
+        <a href="create-auction.html" class="btn-glow">
+            <i class="fas fa-plus"></i> Create Auction
+        </a>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="glass-card p-3 mb-4">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-0 text-secondary"><i class="fas fa-search"></i></span>
+                    <input type="text" id="searchInput" class="form-control" placeholder="Search by title or seller..." onkeyup="filterAuctions()">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select id="statusFilter" class="form-select" onchange="filterAuctions()">
+                    <option value="all">All Auctions</option>
+                    <option value="active" selected>Active Bidding Only</option>
+                    <option value="ended">Closed Auctions</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="sortFilter" class="form-select" onchange="filterAuctions()">
+                    <option value="highest">Sort: Highest Bid</option>
+                    <option value="lowest">Sort: Lowest Bid</option>
+                    <option value="newest">Sort: Newest First</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auctions Grid -->
+    <div id="auctionsContainer" class="row g-4">
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <div class="text-secondary mt-2">Loading live auctions from SQL database...</div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const apiBase = window.location.origin + '/OnlineAuction/api/auction';
+    let socket;
+    let userId = sessionStorage.getItem('userId');
+    let allAuctions = [];
+
+    function updateNavUser() {
+        const userStatusText = document.getElementById('userStatusText');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const loginBtn = document.getElementById('loginBtn');
+
+        if (userId) {
+            userStatusText.textContent = userId;
+            logoutBtn.style.display = 'inline-block';
+            loginBtn.style.display = 'none';
+        } else {
+            userStatusText.textContent = 'Guest';
+            logoutBtn.style.display = 'none';
+            loginBtn.style.display = 'inline-flex';
+        }
+    }
+
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'notification-toast';
+        toast.innerHTML = `<i class="fas fa-bell text-warning"></i><span>${message}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-10px)';
+            toast.style.transition = 'all 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    function initializeWebSocket() {
+        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        socket = new WebSocket(`${wsProto}//${window.location.host}/OnlineAuction/auctionSocket`);
+        
+        socket.onopen = () => {
+            if (userId) socket.send("LOGIN:" + userId);
+            loadAuctions();
+        };
+
+        socket.onmessage = (event) => {
+            if (event.data === "UPDATE_AUCTIONS") {
+                loadAuctions();
+            } else {
+                showToast(event.data);
+            }
+        };
+
+        socket.onclose = () => setTimeout(initializeWebSocket, 5000);
+    }
+
+    async function loadAuctions() {
+        try {
+            const res = await fetch(`${apiBase}/getAll`);
+            if (res.ok) {
+                const data = await res.json();
+                allAuctions = Object.values(data);
+                filterAuctions();
+            }
+        } catch (e) {
+            console.error('Failed to load auctions:', e);
+        }
+    }
+
+    function filterAuctions() {
+        const search = (document.getElementById('searchInput').value || '').toLowerCase();
+        const status = document.getElementById('statusFilter').value;
+        const sort = document.getElementById('sortFilter').value;
+
+        let filtered = allAuctions.filter(a => {
+            const matchesSearch = (a.title && a.title.toLowerCase().includes(search)) ||
+                                  (a.sellerId && a.sellerId.toLowerCase().includes(search)) ||
+                                  (a.description && a.description.toLowerCase().includes(search));
+            const isAct = a.active;
+            const matchesStatus = status === 'all' ? true : (status === 'active' ? isAct : !isAct);
+            return matchesSearch && matchesStatus;
+        });
+
+        if (sort === 'highest') filtered.sort((a,b) => b.highestBid - a.highestBid);
+        if (sort === 'lowest') filtered.sort((a,b) => a.highestBid - b.highestBid);
+        if (sort === 'newest') filtered.reverse();
+
+        renderAuctions(filtered);
+    }
+
+    function renderAuctions(list) {
+        const container = document.getElementById('auctionsContainer');
+        if (list.length === 0) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-5">
+                    <div class="glass-card p-5 mx-auto" style="max-width: 500px;">
+                        <i class="fas fa-inbox text-secondary fa-3x mb-3"></i>
+                        <h5 class="text-white">No Auctions Match Your Criteria</h5>
+                        <p class="text-secondary small">Try adjusting your search filters or start a new listing.</p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = list.map(a => `
+            <div class="col-md-6 col-lg-4">
+                <div class="glass-card p-4 h-100 d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            ${a.active ? 
+                                '<span class="badge-live"><span class="live-dot"></span> LIVE</span>' : 
+                                '<span class="badge bg-secondary">ENDED</span>'}
+                            <small class="text-secondary"><i class="fas fa-user-circle me-1"></i>${a.sellerId || 'Seller'}</small>
+                        </div>
+                        <h4 class="fw-bold text-white mb-2">${a.title}</h4>
+                        <p class="text-secondary small mb-3">${a.description || 'Verified auction listing.'}</p>
+                    </div>
+
+                    <div>
+                        <div class="d-flex justify-content-between align-items-end mb-3 pt-3" style="border-top:1px solid var(--border-glass)">
+                            <div>
+                                <small class="text-secondary" style="font-size:0.75rem;">CURRENT BID</small>
+                                <div class="price-pill">$${a.highestBid.toFixed(2)}</div>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-secondary" style="font-size:0.75rem;">HIGHEST BIDDER</small>
+                                <div class="text-white fw-bold small">${a.bidder || 'No bids yet'}</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button onclick="quickBid('${a.id}', ${a.highestBid}, '${escapeQuotes(a.title)}')" class="btn-glow flex-grow-1 justify-content-center py-2" style="font-size:0.85rem;" ${!a.active ? 'disabled' : ''}>
+                                <i class="fas fa-bolt"></i> Quick Bid
+                            </button>
+                            <a href="bidding.html?id=${a.id}" class="btn-glow-outline justify-content-center px-3 py-2" title="Full Bid Room">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function escapeQuotes(str) {
+        return (str || '').replace(/'/g, "\\'");
+    }
+
+    async function quickBid(auctionId, currentBid, title) {
+        if (!userId) {
+            showToast("Please sign in to place a bid");
+            setTimeout(() => window.location.href = 'login.html', 1500);
+            return;
+        }
+
+        const minNext = currentBid + 5;
+        const input = prompt(`Bid on "${title}"\nCurrent: $${currentBid.toFixed(2)}\nEnter bid amount (Minimum $${minNext.toFixed(2)}):`, minNext);
+        if (!input) return;
+
+        const amount = parseFloat(input);
+        if (isNaN(amount) || amount <= currentBid) {
+            showToast("Bid must be strictly higher than $" + currentBid.toFixed(2));
+            return;
+        }
+
+        try {
+            const res = await fetch(`${apiBase}/bid`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ auctionId, userId, amount })
+            });
+
+            if (res.ok) {
+                showToast("🎉 Bid accepted for $" + amount.toFixed(2));
+                loadAuctions();
+            } else {
+                const err = await res.text();
+                showToast("⚠️ " + err);
+            }
+        } catch (err) {
+            showToast("Error: " + err.message);
+        }
+    }
+
+    function logout() {
+        if (socket && socket.readyState === WebSocket.OPEN) socket.send("LOGOUT");
+        sessionStorage.removeItem('userId');
+        userId = null;
+        updateNavUser();
+        showToast("Logged out");
+    }
+
+    updateNavUser();
+    initializeWebSocket();
+</script>
+</body>
+</html>
